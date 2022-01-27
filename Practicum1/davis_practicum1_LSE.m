@@ -1,4 +1,4 @@
-%% ECE 5390 - Practicum 1 - Least Squares Fitting
+%% ECE 5390 - Practicum 1 - Modeling from Experimental Data
 %  G.Davis
 %  01/25/2022
 

@@ -6,6 +6,9 @@ clc; clear; close all;
 
 %% Data Setup
 
+global y
+global t
+
 lab_data = [0 0
  0.5000 0.3268
  1.0000 0.5913
@@ -60,75 +63,86 @@ Tau = y(idx);
 
 alpha = 1/Tau;
 k = alpha*y(4*idx);
-magn = 0.1; % magnitude by which to change
-operator = 0; % 0 add 1 subtract
-state = 0;
 
 % create initial reference
-LSE = getLSE(alpha, k, y, t);
-prevLSE = ones(1,3); % two-bit memory of error
-tempLSE = 1
+LSE = getLSE(alpha, k);
+prevLSE = LSE;
 
-for i=1:100
+%-------------------
+alpha_pos = alpha; alpha_neg = alpha;
+aLSE_pos = LSE; aLSE_neg = LSE;
+aMag_pos = 0.2; aMag_neg = 0.2;
 
+k_pos = k; k_neg = k;
+kLSE_pos = LSE; kLSE_neg = LSE;
+kMag_pos = 0.2; kMag_neg = 0.2;
+
+mag_order = 0.001;
+%-------------------
+
+for i=1:1000
     if LSE == 0
         break
     end
-     % add logic that if it's only greater than the most previous one to
-     % step back and decrease magnitude.
-     % if greater than both reset magnitude (*2) and restore with new
-     % operator?
-    while state ~= 2
-         if LSE > tempLSE
-            alpha = alterParam(alpha, ~operator, magn);
-            magn = magn/2;
-            alpha = alterParam(alpha, operator, magn);
-            tempLSE = getLSE(alpha, k, y, t);
-            state = state + 1;
-         else
-             break
-         end
-    end
-    if LSE > tempLSE && state == 3
+    
+    if mod(i,2)
+        % work on alpha       
+        alpha_pos = alpha + aMag_pos;
+        alpha_neg = alpha - aMag_neg;
         
+        aLSE_pos = getLSE(alpha_pos, k);
+        aLSE_neg = getLSE(alpha_neg, k);
+        
+        if aLSE_pos > prevLSE && aLSE_neg > prevLSE
+            aMag_pos = aMag_pos - mag_order;
+            aMag_neg = aMag_neg - mag_order;
+        else
+            if aLSE_pos > aLSE_neg
+                aMag_pos = aMag_pos - mag_order;
+                alpha = alpha_neg;
+            else
+                aMag_neg = aMag_neg - mag_order;
+                alpha = alpha_pos;
+            end
+        end
+    else
+        % work on k
+        k_pos = k + kMag_pos;
+        k_neg = k - kMag_neg;
+        
+        kLSE_pos = getLSE(alpha, k_pos);
+        kLSE_neg = getLSE(alpha, k_neg);
+        
+        if kLSE_pos > prevLSE && kLSE_neg > prevLSE
+            kMag_pos = kMag_pos - mag_order;
+            kMag_neg = kMag_neg - mag_order;
+        else
+            if kLSE_pos > kLSE_neg
+                kMag_pos = kMag_pos - mag_order;
+                k = k_neg;
+            else
+                kMag_neg = kMag_neg - mag_order;
+                k = k_pos;
+            end
+        end
     end
-    state = 0;
-     
-%     if LSE > prevLSE(3)
-%         alpha = alterParam(alpha, ~operator, magn);
-%         magn = magn/2;
-%     end
-    if LSE > prevLSE(2) && LSE > prevLSE(3)
-        operator = ~operator;
-%         magn = magn*2;
-        % reset to previous
-        alpha = alterParam(alpha, operator, magn*2);
-        alpha = alterParam(alpha, operator, magn*2);
-%         magn = magn/2; % likely need new logic for this line
-    end
-    
-    alpha = alterParam(alpha,operator,magn);
-    
-    prevLSE = [prevLSE(2) prevLSE(3) LSE];
-    tempLSE = LSE;
-    LSE = getLSE(alpha, k, y, t);
+    prevLSE = LSE;
+    LSE = getLSE(alpha, k);
 end
 
+sys = tf([0 k], [1 alpha]);
+[y_m,~] = step(sys,1:length(t));
 figure, plot(t,y,t,y_m), grid
 xlim([min(t)-1 max(t)+1])
 ylim([min(y)-std(y) max(y)+std(y)])
 
-function LSE = getLSE(alpha, k, y, t)
+%% Second Order System
+
+function LSE = getLSE(alpha, k)
+    global y
+    global t
     sys = tf([0 k], [1 alpha]);
     [y_m,~] = step(sys,1:length(t));
     errordiff = y - y_m;
     LSE = errordiff' * errordiff;
-end
-
-function a = alterParam(x, operator, magn)
-    if operator
-        a = x - magn;
-    else
-        a = x + magn;
-    end
 end
